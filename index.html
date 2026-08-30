@@ -283,6 +283,7 @@ function makePerson(i, salt) {
 
 function makeTableSet(i, salt, x, z) {
   const g = new THREE.Group();
+  g.userData.anims = [];
   const top = new THREE.Mesh(G.tableTop, M.tableTop);
   top.position.y = 1.2;
   const leg = new THREE.Mesh(G.tableLeg, M.tableLeg);
