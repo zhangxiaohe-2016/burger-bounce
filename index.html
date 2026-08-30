@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>汉堡弹跳 - Burger Bounce</title>
+<title>汉堡弹跳 - 华莱士长廊</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; }
@@ -16,6 +16,10 @@
     text-shadow: 0 2px 8px rgba(0,0,0,.6);
   }
   #score .burger { font-size: 28px; }
+  #dist {
+    margin-top: 6px; font-size: 18px; font-weight: bold;
+    text-shadow: 0 2px 6px rgba(0,0,0,.6);
+  }
   #hint {
     position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
     color: rgba(255,255,255,.85); font-size: 14px; z-index: 10;
@@ -35,7 +39,6 @@
     box-shadow: 0 4px 12px rgba(0,0,0,.4);
   }
   #restart:hover { background: #ff5252; }
-  /* 火箭燃料条 */
   #fuelWrap {
     position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
     z-index: 10; display: none; text-align: center;
@@ -75,12 +78,15 @@
 </style>
 </head>
 <body>
-<div id="hud"><div id="score"><span class="burger">🍔</span> <span id="scoreNum">0</span> / <span id="scoreTotal">0</span></div></div>
+<div id="hud">
+  <div id="score"><span class="burger">🍔</span> <span id="scoreNum">0</span></div>
+  <div id="dist">📍 0 米</div>
+</div>
 <div id="fuelWrap">
   <div id="fuelLabel">🚀 燃料 <span id="fuelTime">15.0</span>s</div>
   <div id="fuelBarOuter"><div id="fuelBar"></div></div>
 </div>
-<div id="hint">踩大汉堡会弹跳 🍔 &nbsp;|&nbsp; 云端找火箭 🚀 可飞 15 秒（↑↓ 升降，←→ 左右，Q/E 前后）</div>
+<div id="hint">踩大汉堡弹跳 🍔 &nbsp;|&nbsp; 云端火箭 🚀 飞 15 秒（↑↓ 升降，←→ 左右，Q/E 前后）&nbsp;|&nbsp; 过道无限长，一直往前！</div>
 <div id="msg"></div>
 <button id="restart">重新开始</button>
 <button class="btn" id="btnUp" data-key="ArrowUp">▲</button>
@@ -99,9 +105,9 @@ import * as THREE from 'three';
 // ---------- 基础场景 ----------
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
-scene.fog = new THREE.Fog(0x87ceeb, 80, 220);
+scene.fog = new THREE.Fog(0x87ceeb, 90, 260);
 
-const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 600);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 800);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -109,13 +115,13 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 0.9));
-const sun = new THREE.DirectionalLight(0xfff2cc, 1.2);
+scene.add(new THREE.HemisphereLight(0xfff5e6, 0x8899aa, 1.0));
+const sun = new THREE.DirectionalLight(0xfff2cc, 1.1);
 sun.position.set(20, 40, 10);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -60; sun.shadow.camera.right = 60;
-sun.shadow.camera.top = 60; sun.shadow.camera.bottom = -60;
+sun.shadow.camera.left = -40; sun.shadow.camera.right = 40;
+sun.shadow.camera.top = 40; sun.shadow.camera.bottom = -40;
 scene.add(sun);
 
 // ---------- 玩家 ----------
@@ -149,137 +155,258 @@ const playerState = {
 
 const GRAVITY = -18;
 const JUMP_VEL = 15;
-const BURGER_BOUNCE = 21;   // 踩大汉堡的弹跳速度
+const BURGER_BOUNCE = 21;
 const MOVE_SPEED = 9;
-const FLY_SPEED = 14;       // 火箭飞行速度
-const FLY_TIME = 15;        // 火箭燃料 15 秒
+const FLY_SPEED = 14;
+const FLY_TIME = 15;
 const PLAYER_R = 0.6;
 
 let fuel = 0;
-
-// ---------- 关卡数据 ----------
-const platforms = [];   // { mesh, minX, maxX, minZ, maxZ, top, bouncy, squish, deco }
-const burgers = [];     // 可收集的小汉堡
-const rockets = [];     // 火箭
-let totalBurgers = 0;
 let score = 0;
 
-// 大汉堡平台（踩上去会弹跳）
-function addBigBurger(x, y, z, r = 2.2) {
-  const g = new THREE.Group();
-  const bunMat = new THREE.MeshStandardMaterial({ color: 0xe8a33d, roughness: 0.6 });
-  const pattyMat = new THREE.MeshStandardMaterial({ color: 0x6d4c2f, roughness: 0.8 });
-  const cheeseMat = new THREE.MeshStandardMaterial({ color: 0xffd43b, roughness: 0.4 });
-  const lettuceMat = new THREE.MeshStandardMaterial({ color: 0x7ed957, roughness: 0.6 });
+// ---------- 共享材质 / 几何体 ----------
+const M = {
+  floorA: new THREE.MeshStandardMaterial({ color: 0xd9c8a9, roughness: 0.9 }),
+  floorB: new THREE.MeshStandardMaterial({ color: 0xb8a582, roughness: 0.9 }),
+  wall: new THREE.MeshStandardMaterial({ color: 0xf5e6d3, roughness: 0.9 }),
+  wallTrim: new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.7 }),
+  ceiling: new THREE.MeshStandardMaterial({ color: 0xfdf6ec, roughness: 1 }),
+  light: new THREE.MeshBasicMaterial({ color: 0xfff9e0 }),
+  tableTop: new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.6 }),
+  tableLeg: new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.5, metalness: 0.5 }),
+  chair: new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.7 }),
+  skin: new THREE.MeshStandardMaterial({ color: 0xffe0bd, roughness: 0.8 }),
+  bun: new THREE.MeshStandardMaterial({ color: 0xe8a33d, roughness: 0.6 }),
+  patty: new THREE.MeshStandardMaterial({ color: 0x6d4c2f, roughness: 0.8 }),
+  cheese: new THREE.MeshStandardMaterial({ color: 0xffd43b, roughness: 0.4 }),
+  lettuce: new THREE.MeshStandardMaterial({ color: 0x7ed957, roughness: 0.6 }),
+  sesame: new THREE.MeshBasicMaterial({ color: 0xfff8e7 }),
+  cloud: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 }),
+  rocketBody: new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.3, metalness: 0.4 }),
+  rocketRed: new THREE.MeshStandardMaterial({ color: 0xff6b6b, roughness: 0.4 }),
+  flame: new THREE.MeshBasicMaterial({ color: 0xffa502 }),
+};
+const shirtColors = [0x4a90d9, 0x7ed957, 0xf78fb3, 0xffa502, 0x9b59b6, 0x1abc9c, 0xe74c3c, 0x34495e];
+const hairColors = [0x2c1b0e, 0x111111, 0x4a3728, 0x6b4423];
 
-  const bottom = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.9, 0.5, 32), bunMat);
+const G = {
+  floorA: new THREE.BoxGeometry(18, 0.5, 15),
+  floorB: new THREE.BoxGeometry(18, 0.5, 15),
+  wall: new THREE.BoxGeometry(0.5, 28, 30),
+  trim: new THREE.BoxGeometry(0.6, 1.2, 30),
+  ceil: new THREE.BoxGeometry(18.5, 0.4, 30),
+  lightFix: new THREE.BoxGeometry(2.4, 0.25, 0.7),
+  tableTop: new THREE.CylinderGeometry(1.3, 1.3, 0.12, 20),
+  tableLeg: new THREE.CylinderGeometry(0.12, 0.18, 1.2, 10),
+  chairSeat: new THREE.BoxGeometry(0.7, 0.1, 0.7),
+  chairBack: new THREE.BoxGeometry(0.7, 0.7, 0.1),
+  torso: new THREE.CylinderGeometry(0.28, 0.34, 0.85, 12),
+  head: new THREE.SphereGeometry(0.24, 16, 12),
+  hair: new THREE.SphereGeometry(0.25, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+  arm: new THREE.CylinderGeometry(0.08, 0.08, 0.5, 8),
+  miniBun: new THREE.SphereGeometry(0.14, 10, 8),
+  miniPatty: new THREE.CylinderGeometry(0.15, 0.15, 0.06, 10),
+  board: new THREE.PlaneGeometry(4.5, 2.2),
+  win: new THREE.PlaneGeometry(3.5, 2.5),
+};
+const winMat = new THREE.MeshBasicMaterial({ color: 0xbfe8ff });
+
+// 确定性伪随机
+function rand(i, salt) {
+  const x = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+// ---------- 关卡数据 ----------
+const platforms = [];
+const burgers = [];
+const rockets = [];
+const chunks = [];
+let chunkIndex = 0;
+const CHUNK_LEN = 30;
+const HALL_HALF = 9;
+const CEIL_Y = 28;
+const FLOOR_TOP = -4;
+
+function regPlatform(chunk, p) { p.chunk = chunk; platforms.push(p); return p; }
+function regBurger(chunk, b) { b.chunk = chunk; burgers.push(b); return b; }
+function regRocket(chunk, r) { r.chunk = chunk; rockets.push(r); return r; }
+
+// ---------- 环境组件 ----------
+function makeBoard(text, bg) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, 256, 128);
+  ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 6;
+  ctx.strokeRect(6, 6, 244, 116);
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 42px sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, 128, 64);
+  const tex = new THREE.CanvasTexture(c);
+  const m = new THREE.Mesh(G.board, new THREE.MeshBasicMaterial({ map: tex }));
+  return m;
+}
+
+const BOARD_TEXTS = [
+  ['华莱士', '#c0392b'], ['香辣鸡腿堡', '#e67e22'], ['巨无霸套餐', '#8e44ad'],
+  ['可乐 5 元', '#2c3e50'], ['黄金薯条', '#d35400'], ['香辣鸡翅', '#c0392b'],
+  ['冰激凌 3 元', '#16a085'], ['全家桶 19.9', '#d4ac0d'], ['汉堡 8 元', '#e74c3c'],
+  ['免费 WiFi', '#2980b9'],
+];
+
+function makePerson(i, salt) {
+  const g = new THREE.Group();
+  const shirt = new THREE.MeshStandardMaterial({ color: shirtColors[Math.floor(rand(i, salt) * shirtColors.length)], roughness: 0.8 });
+  const hair = new THREE.MeshStandardMaterial({ color: hairColors[Math.floor(rand(i, salt + 1) * hairColors.length)], roughness: 0.9 });
+  const torso = new THREE.Mesh(G.torso, shirt);
+  torso.position.y = 1.05;
+  const head = new THREE.Mesh(G.head, M.skin);
+  head.position.y = 1.72;
+  const hairM = new THREE.Mesh(G.hair, hair);
+  hairM.position.y = 1.76;
+  // 举着汉堡的手
+  const arm = new THREE.Mesh(G.arm, shirt);
+  arm.position.set(0.3, 1.35, 0.15);
+  arm.rotation.z = -0.9;
+  const miniTop = new THREE.Mesh(G.miniBun, M.bun);
+  miniTop.scale.y = 0.6;
+  miniTop.position.set(0.48, 1.55, 0.15);
+  const miniPatty = new THREE.Mesh(G.miniPatty, M.patty);
+  miniPatty.position.set(0.48, 1.48, 0.15);
+  const miniBot = new THREE.Mesh(G.miniBun, M.bun);
+  miniBot.scale.set(1, 0.4, 1);
+  miniBot.position.set(0.48, 1.42, 0.15);
+  g.add(torso, head, hairM, arm, miniTop, miniPatty, miniBot);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
+
+function makeTableSet(i, salt, x, z) {
+  const g = new THREE.Group();
+  const top = new THREE.Mesh(G.tableTop, M.tableTop);
+  top.position.y = 1.2;
+  const leg = new THREE.Mesh(G.tableLeg, M.tableLeg);
+  leg.position.y = 0.6;
+  g.add(top, leg);
+  // 桌上饮料
+  const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.1, 0.3, 10),
+    new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.5 }));
+  cup.position.set(0.4, 1.41, 0.2);
+  g.add(cup);
+  // 椅子 + 吃饭的人（1~2 个）
+  const nPeople = 1 + Math.floor(rand(i, salt + 5) * 2);
+  for (let k = 0; k < nPeople; k++) {
+    const side = k === 0 ? -1 : 1;
+    const chair = new THREE.Group();
+    const seat = new THREE.Mesh(G.chairSeat, M.chair);
+    seat.position.y = 0.55;
+    const back = new THREE.Mesh(G.chairBack, M.chair);
+    back.position.set(0, 0.9, 0.3);
+    chair.add(seat, back);
+    chair.position.set(side * 1.7, 0, 0);
+    chair.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+    g.add(chair);
+    const person = makePerson(i, salt + 10 + k * 7);
+    person.position.set(side * 1.7, 0, 0);
+    person.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+    g.add(person);
+    g.userData.anims.push({ obj: person, phase: rand(i, salt + 20 + k) * 6.28 });
+  }
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.position.set(x, FLOOR_TOP, z);
+  return g;
+}
+
+// ---------- 玩法组件 ----------
+function makeBigBurger(r = 2.2) {
+  const g = new THREE.Group();
+  const bottom = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.9, 0.5, 32), M.bun);
   bottom.position.y = -2.5;
-  const patty = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.02, r * 1.02, 0.45, 32), pattyMat);
+  const patty = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.02, r * 1.02, 0.45, 32), M.patty);
   patty.position.y = -1.95;
-  const cheese = new THREE.Mesh(new THREE.BoxGeometry(r * 1.9, 0.12, r * 1.9), cheeseMat);
+  const cheese = new THREE.Mesh(new THREE.BoxGeometry(r * 1.9, 0.12, r * 1.9), M.cheese);
   cheese.position.y = -1.6;
-  const lettuce = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.06, r * 1.06, 0.2, 32), lettuceMat);
+  const lettuce = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.06, r * 1.06, 0.2, 32), M.lettuce);
   lettuce.position.y = -1.4;
-  const top = new THREE.Mesh(new THREE.SphereGeometry(r, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), bunMat);
+  const top = new THREE.Mesh(new THREE.SphereGeometry(r, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), M.bun);
   top.scale.y = 0.55;
   top.position.y = -1.25;
   g.add(bottom, patty, cheese, lettuce, top);
-  // 芝麻
-  const sesameMat = new THREE.MeshBasicMaterial({ color: 0xfff8e7 });
   for (let i = 0; i < 14; i++) {
-    const s = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), sesameMat);
+    const s = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), M.sesame);
     const a = (i / 14) * Math.PI * 2;
     const rr = r * (0.3 + Math.random() * 0.5);
     s.position.set(Math.cos(a) * rr, -1.25 + Math.sqrt(Math.max(0, 1 - (rr / r) ** 2)) * r * 0.55 - 0.05, Math.sin(a) * rr);
     g.add(s);
   }
   g.traverse(o => { if (o.isMesh) o.castShadow = true; });
-  g.position.set(x, y, z);
-  scene.add(g);
-
-  const p = {
-    mesh: g, bouncy: true, squish: 0,
-    minX: x - r, maxX: x + r,
-    minZ: z - r, maxZ: z + r,
-    top: y,
-  };
-  platforms.push(p);
-  return p;
+  return g;
 }
 
-// 云朵平台（可以站上去，不弹跳）
-function addCloud(x, y, z, w, d) {
+function addBigBurger(chunk, x, y, z, r = 2.2) {
+  const g = makeBigBurger(r);
+  g.position.set(x, y, z);
+  chunk.group.add(g);
+  return regPlatform(chunk, {
+    mesh: g, bouncy: true, squish: 0,
+    minX: x - r, maxX: x + r, minZ: z - r, maxZ: z + r, top: y,
+  });
+}
+
+function addCloud(chunk, x, y, z, w, d) {
   const g = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 });
-  const n = Math.max(3, Math.round(w * d / 4));
+  const n = Math.max(4, Math.round(w * d / 3));
   for (let i = 0; i < n; i++) {
-    const s = new THREE.Mesh(new THREE.SphereGeometry(1.2 + Math.random() * 1.2, 14, 10), mat);
+    const s = new THREE.Mesh(new THREE.SphereGeometry(1.2 + Math.random() * 1.2, 14, 10), M.cloud);
     s.position.set((Math.random() - 0.5) * w * 0.8, (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * d * 0.8);
     g.add(s);
   }
   g.traverse(o => { if (o.isMesh) o.castShadow = true; });
   g.position.set(x, y - 0.5, z);
-  scene.add(g);
-  const p = {
+  chunk.group.add(g);
+  return regPlatform(chunk, {
     mesh: g, bouncy: false, squish: 0,
-    minX: x - w / 2, maxX: x + w / 2,
-    minZ: z - d / 2, maxZ: z + d / 2,
-    top: y,
-  };
-  platforms.push(p);
-  return p;
+    minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2, top: y,
+  });
 }
 
-// 火箭（碰到获得 15 秒飞行燃料）
-function addRocket(x, y, z) {
+function addRocket(chunk, x, y, z) {
   const g = new THREE.Group();
-  const bodyM = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.6, 20),
-    new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.3, metalness: 0.4 }));
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.7, 20),
-    new THREE.MeshStandardMaterial({ color: 0xff6b6b, roughness: 0.4 }));
+  const bodyM = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.6, 20), M.rocketBody);
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.7, 20), M.rocketRed);
   nose.position.y = 1.15;
   g.add(bodyM, nose);
-  const finMat = new THREE.MeshStandardMaterial({ color: 0xff6b6b, roughness: 0.4 });
   for (let i = 0; i < 4; i++) {
-    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.5), finMat);
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.5), M.rocketRed);
     const a = (i / 4) * Math.PI * 2;
     fin.position.set(Math.cos(a) * 0.45, -0.7, Math.sin(a) * 0.45);
     fin.rotation.y = -a;
     g.add(fin);
   }
-  // 火焰（默认隐藏）
-  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.9, 12),
-    new THREE.MeshBasicMaterial({ color: 0xffa502 }));
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.9, 12), M.flame);
   flame.position.y = -1.3;
   flame.rotation.x = Math.PI;
   flame.visible = false;
   g.add(flame);
   g.traverse(o => { if (o.isMesh) o.castShadow = true; });
   g.position.set(x, y + 1.2, z);
-  scene.add(g);
-  rockets.push({ group: g, flame, x, y: y + 1.2, z, used: false });
+  chunk.group.add(g);
+  return regRocket(chunk, { group: g, flame, x, y: y + 1.2, z });
 }
 
-// 可收集的小汉堡
-function addBurger(x, y, z) {
+function addBurger(chunk, x, y, z) {
   const g = new THREE.Group();
-  const bottom = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.18, 24),
-    new THREE.MeshStandardMaterial({ color: 0xe8a33d, roughness: 0.6 }));
-  const patty = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.16, 24),
-    new THREE.MeshStandardMaterial({ color: 0x6d4c2f, roughness: 0.8 }));
+  const bottom = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.18, 24), M.bun);
+  const patty = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.16, 24), M.patty);
   patty.position.y = 0.18;
-  const cheese = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.05, 0.95),
-    new THREE.MeshStandardMaterial({ color: 0xffd43b, roughness: 0.4 }));
+  const cheese = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.05, 0.95), M.cheese);
   cheese.position.y = 0.3;
-  const lettuce = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.08, 24),
-    new THREE.MeshStandardMaterial({ color: 0x7ed957, roughness: 0.6 }));
+  const lettuce = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.08, 24), M.lettuce);
   lettuce.position.y = 0.38;
-  const top = new THREE.Mesh(new THREE.SphereGeometry(0.5, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: 0xe8a33d, roughness: 0.6 }));
+  const top = new THREE.Mesh(new THREE.SphereGeometry(0.5, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), M.bun);
   top.position.y = 0.42;
-  const sesameMat = new THREE.MeshBasicMaterial({ color: 0xfff8e7 });
   for (let i = 0; i < 6; i++) {
-    const s = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), sesameMat);
+    const s = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), M.sesame);
     const a = (i / 6) * Math.PI * 2;
     s.position.set(Math.cos(a) * 0.28, 0.72, Math.sin(a) * 0.28);
     g.add(s);
@@ -287,56 +414,131 @@ function addBurger(x, y, z) {
   g.add(bottom, patty, cheese, lettuce, top);
   g.traverse(o => { if (o.isMesh) o.castShadow = true; });
   g.position.set(x, y + 0.9, z);
-  scene.add(g);
-  burgers.push({ group: g, collected: false, baseY: y + 0.9 });
-  totalBurgers++;
+  chunk.group.add(g);
+  return regBurger(chunk, { group: g, collected: false, baseY: y + 0.9 });
 }
 
-// ---------- 搭建关卡 ----------
-// 地面：大汉堡弹跳塔，一路弹上云端
-addBigBurger(0, 0, 0, 2.6);          // 起点
-addBigBurger(0, 5, -9, 2.2);
-addBigBurger(2, 10, -16, 2.2);
-addBigBurger(-2, 15, -23, 2.2);
-addBigBurger(0, 20, -30, 2.2);
+// ---------- 区块生成（无限长廊） ----------
+function generateChunk(i) {
+  const zNear = -i * CHUNK_LEN;
+  const zFar = zNear - CHUNK_LEN;
+  const zMid = zNear - CHUNK_LEN / 2;
+  const g = new THREE.Group();
+  const chunk = { i, group: g, zNear, zFar, anims: [] };
 
-// 云端（可站立）+ 火箭
-addCloud(0, 28, -38, 8, 8);
-addRocket(0, 28, -38);
-addCloud(7, 33, -48, 7, 7);
-addRocket(7, 33, -48);
-addCloud(-7, 38, -58, 7, 7);
-addRocket(-7, 38, -58);
+  // 地板（两色相间，可站立）
+  const f1 = new THREE.Mesh(G.floorA, M.floorA);
+  f1.position.set(0, FLOOR_TOP - 0.25, zNear - 7.5);
+  const f2 = new THREE.Mesh(G.floorB, M.floorB);
+  f2.position.set(0, FLOOR_TOP - 0.25, zNear - 22.5);
+  f1.receiveShadow = true; f2.receiveShadow = true;
+  g.add(f1, f2);
+  regPlatform(chunk, {
+    mesh: f1, bouncy: false, squish: 0,
+    minX: -HALL_HALF, maxX: HALL_HALF, minZ: zFar, maxZ: zNear, top: FLOOR_TOP,
+  });
 
-// 终点：最高处的云顶
-addCloud(0, 46, -70, 10, 10);
+  // 墙 + 红色装饰条
+  const wallL = new THREE.Mesh(G.wall, M.wall);
+  wallL.position.set(-HALL_HALF - 0.25, CEIL_Y / 2, zMid);
+  const wallR = new THREE.Mesh(G.wall, M.wall);
+  wallR.position.set(HALL_HALF + 0.25, CEIL_Y / 2, zMid);
+  const trimL = new THREE.Mesh(G.trim, M.wallTrim);
+  trimL.position.set(-HALL_HALF + 0.1, 2.5, zMid);
+  const trimR = new THREE.Mesh(G.trim, M.wallTrim);
+  trimR.position.set(HALL_HALF - 0.1, 2.5, zMid);
+  g.add(wallL, wallR, trimL, trimR);
 
-// 沿途小汉堡
-addBurger(0, 5, -9);
-addBurger(2, 10, -16);
-addBurger(-2, 15, -23);
-addBurger(0, 20, -30);
-addBurger(0, 28, -38);
-addBurger(7, 33, -48);
-addBurger(-7, 38, -58);
-addBurger(0, 46, -70);
-addBurger(-2, 46, -70);
-addBurger(2, 46, -70);
-document.getElementById('scoreTotal').textContent = totalBurgers;
-
-// 背景装饰云
-const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 });
-for (let i = 0; i < 30; i++) {
-  const c = new THREE.Group();
-  const n = 3 + Math.floor(Math.random() * 3);
-  for (let j = 0; j < n; j++) {
-    const s = new THREE.Mesh(new THREE.SphereGeometry(1.5 + Math.random() * 1.5, 12, 10), cloudMat);
-    s.position.set(j * 1.8 - n, Math.random() * 0.8, Math.random() * 1.5);
-    c.add(s);
+  // 天花板 + 吊灯
+  const ceil = new THREE.Mesh(G.ceil, M.ceiling);
+  ceil.position.set(0, CEIL_Y, zMid);
+  g.add(ceil);
+  for (let k = 0; k < 3; k++) {
+    const fix = new THREE.Mesh(G.lightFix, M.light);
+    fix.position.set(0, CEIL_Y - 0.4, zNear - 5 - k * 10);
+    g.add(fix);
   }
-  c.position.set((Math.random() - 0.5) * 160, 10 + Math.random() * 50, -Math.random() * 180);
-  scene.add(c);
+
+  // 菜单牌 + 窗户
+  for (let k = 0; k < 2; k++) {
+    const [text, bg] = BOARD_TEXTS[Math.floor(rand(i, k * 3 + 30) * BOARD_TEXTS.length)];
+    const board = makeBoard(text, bg);
+    const side = k === 0 ? -1 : 1;
+    board.position.set(side * (HALL_HALF - 0.05), 12, zNear - 8 - k * 14);
+    board.rotation.y = side > 0 ? -Math.PI / 2 : Math.PI / 2;
+    g.add(board);
+    const win = new THREE.Mesh(G.win, winMat);
+    win.position.set(-side * (HALL_HALF - 0.05), 10, zNear - 15 - k * 10);
+    win.rotation.y = -side > 0 ? -Math.PI / 2 : Math.PI / 2;
+    g.add(win);
+  }
+
+  // 餐桌 + 吃饭的人（过道两侧）
+  for (let k = 0; k < 3; k++) {
+    const side = (k % 2 === 0) ? -1 : 1;
+    const tz = zNear - 6 - k * 10;
+    const table = makeTableSet(i, k * 13, side * 6.2, tz);
+    g.add(table);
+    chunk.anims.push(...table.userData.anims.map(a => ({ ...a })));
+  }
+
+  // 大汉堡弹跳台（3 个，第 1 个保证低，方便从地板跳上）
+  for (let j = 0; j < 3; j++) {
+    const bx = (rand(i, j) - 0.5) * 6;
+    const by = j === 0 ? 1 + rand(i, j + 40) * 1.5 : 2 + rand(i, j + 40) * 6;
+    const bz = zNear - 6 - j * 9;
+    const r = 2.0 + rand(i, j + 50) * 0.6;
+    addBigBurger(chunk, bx, by, bz, r);
+    if (rand(i, j + 60) > 0.35) addBurger(chunk, bx, by, bz);
+  }
+
+  // 每 4 个区块一段云端（云可站 + 多个火箭）
+  if (i % 4 === 3) {
+    addBigBurger(chunk, 0, 10, zMid, 2.4);          // 跳板
+    addBurger(chunk, 0, 10, zMid);
+    const c1x = (rand(i, 70) - 0.5) * 6;
+    const c2x = (rand(i, 71) - 0.5) * 6;
+    const c1y = 16 + rand(i, 72) * 3;
+    const c2y = 18 + rand(i, 73) * 3;
+    const c1 = addCloud(chunk, c1x, c1y, zNear - 10, 7, 7);
+    const c2 = addCloud(chunk, c2x, c2y, zNear - 22, 7, 7);
+    addRocket(chunk, c1x, c1y, zNear - 10);
+    addRocket(chunk, c1x + 2, c1y, zNear - 12);
+    addRocket(chunk, c2x, c2y, zNear - 22);
+    addRocket(chunk, c2x - 2, c2y, zNear - 20);
+    addBurger(chunk, c1x, c1y, zNear - 10);
+    addBurger(chunk, c2x, c2y, zNear - 22);
+  } else if (rand(i, 80) > 0.5) {
+    // 普通区块偶尔也飘一朵带火箭的云
+    const cx = (rand(i, 81) - 0.5) * 6;
+    const cy = 15 + rand(i, 82) * 4;
+    addCloud(chunk, cx, cy, zMid, 6, 6);
+    addRocket(chunk, cx, cy, zMid);
+    addBurger(chunk, cx, cy, zMid);
+  }
+
+  scene.add(g);
+  chunks.push(chunk);
+  chunkIndex++;
 }
+
+function removeChunk(chunk) {
+  scene.remove(chunk.group);
+  for (let i = platforms.length - 1; i >= 0; i--) if (platforms[i].chunk === chunk) platforms.splice(i, 1);
+  for (let i = burgers.length - 1; i >= 0; i--) if (burgers[i].chunk === chunk) burgers.splice(i, 1);
+  for (let i = rockets.length - 1; i >= 0; i--) if (rockets[i].chunk === chunk) rockets.splice(i, 1);
+  const idx = chunks.indexOf(chunk);
+  if (idx >= 0) chunks.splice(idx, 1);
+}
+
+function updateChunks() {
+  const pz = playerState.pos.z;
+  while (-(chunkIndex) * CHUNK_LEN > pz - 160) generateChunk(chunkIndex);
+  for (const c of [...chunks]) if (c.zNear < pz + 90) removeChunk(c);
+}
+
+// 初始生成
+for (let i = 0; i < 6; i++) generateChunk(i);
 
 // ---------- 输入 ----------
 const keys = {};
@@ -390,9 +592,11 @@ function updateFuelHUD() {
 // ---------- 主循环 ----------
 const clock = new THREE.Clock();
 const camTarget = new THREE.Vector3();
+let distShown = -1;
 
 function update(dt) {
   const st = playerState;
+  updateChunks();
 
   // 火箭：碰到且没燃料时启动
   for (const r of rockets) {
@@ -404,7 +608,6 @@ function update(dt) {
   }
 
   if (st.flying) {
-    // ---- 飞行模式：无重力，方向可控 ----
     fuel -= dt;
     if (fuel <= 0) {
       fuel = 0;
@@ -414,20 +617,17 @@ function update(dt) {
     let fx = 0, fy = 0, fz = 0;
     if (keys['ArrowLeft'] || keys['KeyA']) fx -= 1;
     if (keys['ArrowRight'] || keys['KeyD']) fx += 1;
-    if (keys['ArrowUp'] || keys['KeyW']) fy += 1;    // 升高
-    if (keys['ArrowDown'] || keys['KeyS']) fy -= 1;  // 下降
-    if (keys['KeyQ']) fz -= 1;                        // 前进
-    if (keys['KeyE']) fz += 1;                        // 后退
+    if (keys['ArrowUp'] || keys['KeyW']) fy += 1;
+    if (keys['ArrowDown'] || keys['KeyS']) fy -= 1;
+    if (keys['KeyQ']) fz -= 1;
+    if (keys['KeyE']) fz += 1;
     const flen = Math.hypot(fx, fy, fz) || 1;
     const target = new THREE.Vector3(fx / flen, fy / flen, fz / flen).multiplyScalar(
       (fx || fy || fz) ? FLY_SPEED : 0);
     st.vel.lerp(target, Math.min(1, dt * 6));
     st.pos.addScaledVector(st.vel, dt);
     if (fx !== 0) st.facing = fx;
-    // 火焰
-    for (const r of rockets) r.flame.visible = false;
   } else {
-    // ---- 普通模式 ----
     let mx = 0, mz = 0;
     if (keys['ArrowLeft'] || keys['KeyA']) mx -= 1;
     if (keys['ArrowRight'] || keys['KeyD']) mx += 1;
@@ -447,7 +647,6 @@ function update(dt) {
     st.vel.y += GRAVITY * dt;
     st.pos.addScaledVector(st.vel, dt);
 
-    // 平台碰撞
     st.onGround = false;
     let bounced = null;
     for (const p of platforms) {
@@ -492,11 +691,17 @@ function update(dt) {
       score++;
       document.getElementById('scoreNum').textContent = score;
       showMsg('🍔 +1 美味！');
-      if (score === totalBurgers) showMsg('🎉 全部收集！汉堡大师！');
     }
   }
 
-  if (st.pos.y < -15) respawn();
+  // 距离
+  const dist = Math.max(0, Math.floor(-st.pos.z));
+  if (dist !== distShown) {
+    distShown = dist;
+    document.getElementById('dist').textContent = `📍 ${dist} 米`;
+  }
+
+  if (st.pos.y < -20) respawn();
 
   // 玩家外观
   player.position.copy(st.pos);
@@ -509,12 +714,19 @@ function update(dt) {
   cheekL.position.x = -0.35 + ex; cheekR.position.x = 0.35 + ex;
   if (st.vel.length() > 0.5) player.rotation.y = Math.atan2(st.vel.x, st.vel.z);
 
-  // 小汉堡旋转 + 浮动
   const t = clock.elapsedTime;
+  // 小汉堡旋转 + 浮动
   for (const b of burgers) {
     if (b.collected) continue;
     b.group.rotation.y = t * 1.5;
     b.group.position.y = b.baseY + Math.sin(t * 2 + b.baseY) * 0.15;
+  }
+  // 吃饭的人轻微晃动
+  for (const c of chunks) {
+    for (const a of c.anims) {
+      a.obj.position.y = Math.sin(t * 2 + a.phase) * 0.05;
+      a.obj.rotation.z = Math.sin(t * 1.5 + a.phase) * 0.03;
+    }
   }
 
   // 相机跟随
@@ -536,11 +748,13 @@ animate();
 
 // ---------- 重新开始 ----------
 document.getElementById('restart').addEventListener('click', () => {
+  for (const c of [...chunks]) removeChunk(c);
+  chunkIndex = 0;
   score = 0;
   fuel = 0;
   updateFuelHUD();
   document.getElementById('scoreNum').textContent = 0;
-  for (const b of burgers) { b.collected = false; b.group.visible = true; }
+  for (let i = 0; i < 6; i++) generateChunk(i);
   respawnPoint.set(0, 2, 0);
   lastSafe.set(0, 2, 0);
   playerState.pos.set(0, 2, 0);
