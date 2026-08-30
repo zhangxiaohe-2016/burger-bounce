@@ -597,6 +597,17 @@ function updateFuelHUD() {
   }
 }
 
+// 调试参数：?tp=x,y,z 把玩家传送到指定位置（截图/调试用）
+const tp = new URLSearchParams(location.search).get('tp');
+if (tp) {
+  const [tx, ty, tz] = tp.split(',').map(Number);
+  if ([tx, ty, tz].every(Number.isFinite)) {
+    playerState.pos.set(tx, ty, tz);
+    lastSafe.set(tx, ty, tz);
+    respawnPoint.set(tx, ty, tz);
+  }
+}
+
 // ---------- 主循环 ----------
 const clock = new THREE.Clock();
 const camTarget = new THREE.Vector3();

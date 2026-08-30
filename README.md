@@ -8,6 +8,10 @@
 
 你的目标只有一个：**一直往前，弹得越高、飞得越远越好！**
 
+| 起点：巨型汉堡上弹起 | 餐厅长廊：两侧顾客干饭中 | 云端：火箭待命 |
+|---|---|---|
+| ![](docs/screenshots/1-start.png) | ![](docs/screenshots/2-corridor.png) | ![](docs/screenshots/3-clouds.png) |
+
 ## 玩法
 
 | 操作 | 按键 | 屏幕按钮 |
