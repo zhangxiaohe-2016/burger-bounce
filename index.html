@@ -541,7 +541,8 @@ function removeChunk(chunk) {
 function updateChunks() {
   const pz = playerState.pos.z;
   while (-(chunkIndex) * CHUNK_LEN > pz - 160) generateChunk(chunkIndex);
-  for (const c of [...chunks]) if (c.zNear < pz + 90) removeChunk(c);
+  // 区块完全在玩家身后 90 米外才回收（玩家朝 -z 前进）
+  for (const c of [...chunks]) if (c.zFar > pz + 90) removeChunk(c);
 }
 
 // 初始生成
