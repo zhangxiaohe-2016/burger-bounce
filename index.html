@@ -145,7 +145,7 @@ player.add(cheekL, cheekR);
 scene.add(player);
 
 const playerState = {
-  pos: new THREE.Vector3(0, 2, 0),
+  pos: new THREE.Vector3(0, 1.5, 0),
   vel: new THREE.Vector3(0, 0, 0),
   onGround: false,
   facing: 1,
@@ -483,6 +483,12 @@ function generateChunk(i) {
     chunk.anims.push(...table.userData.anims.map(a => ({ ...a })));
   }
 
+  // 起点大汉堡（第 0 区块）
+  if (i === 0) {
+    addBigBurger(chunk, 0, 0, 0, 2.8);
+    addBurger(chunk, 0, 0, 0);
+  }
+
   // 大汉堡弹跳台（3 个，第 1 个保证低，方便从地板跳上）
   for (let j = 0; j < 3; j++) {
     const bx = (rand(i, j) - 0.5) * 6;
@@ -558,8 +564,8 @@ document.querySelectorAll('.btn').forEach(btn => {
 });
 
 // ---------- 重生 ----------
-const respawnPoint = new THREE.Vector3(0, 2, 0);
-let lastSafe = new THREE.Vector3(0, 2, 0);
+const respawnPoint = new THREE.Vector3(0, 1.5, 0);
+let lastSafe = new THREE.Vector3(0, 1.5, 0);
 
 function respawn() {
   playerState.pos.copy(respawnPoint);
@@ -756,9 +762,9 @@ document.getElementById('restart').addEventListener('click', () => {
   updateFuelHUD();
   document.getElementById('scoreNum').textContent = 0;
   for (let i = 0; i < 6; i++) generateChunk(i);
-  respawnPoint.set(0, 2, 0);
-  lastSafe.set(0, 2, 0);
-  playerState.pos.set(0, 2, 0);
+  respawnPoint.set(0, 1.5, 0);
+  lastSafe.set(0, 1.5, 0);
+  playerState.pos.set(0, 1.5, 0);
   playerState.vel.set(0, 0, 0);
   playerState.flying = false;
   showMsg('重新开始！');
