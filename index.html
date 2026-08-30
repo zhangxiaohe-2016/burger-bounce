@@ -18,13 +18,13 @@
   #score .burger { font-size: 28px; }
   #hint {
     position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
-    color: rgba(255,255,255,.85); font-size: 15px; z-index: 10;
+    color: rgba(255,255,255,.85); font-size: 14px; z-index: 10;
     background: rgba(0,0,0,.35); padding: 8px 18px; border-radius: 20px;
     user-select: none; pointer-events: none; white-space: nowrap;
   }
   #msg {
-    position: fixed; top: 40%; left: 50%; transform: translate(-50%,-50%);
-    color: #ffd166; font-size: 42px; font-weight: bold; z-index: 10;
+    position: fixed; top: 38%; left: 50%; transform: translate(-50%,-50%);
+    color: #ffd166; font-size: 40px; font-weight: bold; z-index: 10;
     text-shadow: 0 3px 12px rgba(0,0,0,.7);
     opacity: 0; transition: opacity .3s; pointer-events: none;
   }
@@ -35,6 +35,23 @@
     box-shadow: 0 4px 12px rgba(0,0,0,.4);
   }
   #restart:hover { background: #ff5252; }
+  /* 火箭燃料条 */
+  #fuelWrap {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    z-index: 10; display: none; text-align: center;
+    color: #fff; font-weight: bold; text-shadow: 0 2px 6px rgba(0,0,0,.6);
+  }
+  #fuelLabel { font-size: 16px; margin-bottom: 4px; }
+  #fuelBarOuter {
+    width: 260px; height: 18px; border-radius: 10px;
+    background: rgba(0,0,0,.45); overflow: hidden;
+    border: 2px solid rgba(255,255,255,.5);
+  }
+  #fuelBar {
+    height: 100%; width: 100%;
+    background: linear-gradient(90deg, #ff6b6b, #ffd166);
+    transition: width .1s linear;
+  }
   .btn {
     position: fixed; z-index: 20;
     width: 64px; height: 64px; border-radius: 50%;
@@ -59,14 +76,18 @@
 </head>
 <body>
 <div id="hud"><div id="score"><span class="burger">🍔</span> <span id="scoreNum">0</span> / <span id="scoreTotal">0</span></div></div>
-<div id="hint">↑↓←→ / WASD 移动 &nbsp;|&nbsp; 空格 跳跃 &nbsp;|&nbsp; 也可以用屏幕按钮 &nbsp;|&nbsp; 踩到 🍩 甜甜圈会被弹飞！</div>
+<div id="fuelWrap">
+  <div id="fuelLabel">🚀 燃料 <span id="fuelTime">15.0</span>s</div>
+  <div id="fuelBarOuter"><div id="fuelBar"></div></div>
+</div>
+<div id="hint">踩大汉堡会弹跳 🍔 &nbsp;|&nbsp; 云端找火箭 🚀 可飞 15 秒（↑↓ 升降，←→ 左右，Q/E 前后）</div>
+<div id="msg"></div>
+<button id="restart">重新开始</button>
 <button class="btn" id="btnUp" data-key="ArrowUp">▲</button>
 <button class="btn" id="btnDown" data-key="ArrowDown">▼</button>
 <button class="btn" id="btnLeft" data-key="ArrowLeft">◀</button>
 <button class="btn" id="btnRight" data-key="ArrowRight">▶</button>
 <button class="btn" id="btnJump" data-key="Space">跳！</button>
-<div id="msg"></div>
-<button id="restart">重新开始</button>
 
 <script type="importmap">
 { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
@@ -78,9 +99,9 @@ import * as THREE from 'three';
 // ---------- 基础场景 ----------
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
-scene.fog = new THREE.Fog(0x87ceeb, 60, 160);
+scene.fog = new THREE.Fog(0x87ceeb, 80, 220);
 
-const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 500);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 600);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -88,7 +109,6 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
-// 灯光
 scene.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 0.9));
 const sun = new THREE.DirectionalLight(0xfff2cc, 1.2);
 sun.position.set(20, 40, 10);
@@ -100,17 +120,17 @@ scene.add(sun);
 
 // ---------- 玩家 ----------
 const player = new THREE.Group();
-const bodyMat = new THREE.MeshStandardMaterial({ color: 0xffd166, roughness: 0.5 });
-const body = new THREE.Mesh(new THREE.SphereGeometry(0.6, 32, 24), bodyMat);
+const body = new THREE.Mesh(
+  new THREE.SphereGeometry(0.6, 32, 24),
+  new THREE.MeshStandardMaterial({ color: 0xffd166, roughness: 0.5 })
+);
 body.castShadow = true;
 player.add(body);
-// 眼睛
 const eyeMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
 const eyeGeo = new THREE.SphereGeometry(0.09, 12, 12);
 const eyeL = new THREE.Mesh(eyeGeo, eyeMat); eyeL.position.set(-0.2, 0.15, 0.5);
 const eyeR = new THREE.Mesh(eyeGeo, eyeMat); eyeR.position.set(0.2, 0.15, 0.5);
 player.add(eyeL, eyeR);
-// 腮红
 const cheekMat = new THREE.MeshBasicMaterial({ color: 0xff8fa3 });
 const cheekGeo = new THREE.SphereGeometry(0.07, 10, 10);
 const cheekL = new THREE.Mesh(cheekGeo, cheekMat); cheekL.position.set(-0.35, -0.05, 0.45);
@@ -124,70 +144,127 @@ const playerState = {
   onGround: false,
   facing: 1,
   squash: 1,
+  flying: false,
 };
 
-const GRAVITY = -18;      // 重力调小 → 滞空更久、手感更飘
-const JUMP_VEL = 15;      // 跳跃初速度调大 → 跳得更高
-const SPRING_VEL = 30;    // 弹簧弹射也相应加强
+const GRAVITY = -18;
+const JUMP_VEL = 15;
+const BURGER_BOUNCE = 21;   // 踩大汉堡的弹跳速度
 const MOVE_SPEED = 9;
+const FLY_SPEED = 14;       // 火箭飞行速度
+const FLY_TIME = 15;        // 火箭燃料 15 秒
 const PLAYER_R = 0.6;
 
+let fuel = 0;
+
 // ---------- 关卡数据 ----------
-const platforms = [];   // { mesh, minX, maxX, minZ, maxZ, top, spring }
-const burgers = [];     // { group, collected }
+const platforms = [];   // { mesh, minX, maxX, minZ, maxZ, top, bouncy, squish, deco }
+const burgers = [];     // 可收集的小汉堡
+const rockets = [];     // 火箭
 let totalBurgers = 0;
 let score = 0;
 
-function addPlatform(x, y, z, w, d, color, spring = false) {
-  const h = 0.8;
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-  mesh.position.set(x, y - h/2, z);
-  mesh.castShadow = true; mesh.receiveShadow = true;
-  scene.add(mesh);
+// 大汉堡平台（踩上去会弹跳）
+function addBigBurger(x, y, z, r = 2.2) {
+  const g = new THREE.Group();
+  const bunMat = new THREE.MeshStandardMaterial({ color: 0xe8a33d, roughness: 0.6 });
+  const pattyMat = new THREE.MeshStandardMaterial({ color: 0x6d4c2f, roughness: 0.8 });
+  const cheeseMat = new THREE.MeshStandardMaterial({ color: 0xffd43b, roughness: 0.4 });
+  const lettuceMat = new THREE.MeshStandardMaterial({ color: 0x7ed957, roughness: 0.6 });
+
+  const bottom = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.9, 0.5, 32), bunMat);
+  bottom.position.y = -2.5;
+  const patty = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.02, r * 1.02, 0.45, 32), pattyMat);
+  patty.position.y = -1.95;
+  const cheese = new THREE.Mesh(new THREE.BoxGeometry(r * 1.9, 0.12, r * 1.9), cheeseMat);
+  cheese.position.y = -1.6;
+  const lettuce = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.06, r * 1.06, 0.2, 32), lettuceMat);
+  lettuce.position.y = -1.4;
+  const top = new THREE.Mesh(new THREE.SphereGeometry(r, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), bunMat);
+  top.scale.y = 0.55;
+  top.position.y = -1.25;
+  g.add(bottom, patty, cheese, lettuce, top);
+  // 芝麻
+  const sesameMat = new THREE.MeshBasicMaterial({ color: 0xfff8e7 });
+  for (let i = 0; i < 14; i++) {
+    const s = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), sesameMat);
+    const a = (i / 14) * Math.PI * 2;
+    const rr = r * (0.3 + Math.random() * 0.5);
+    s.position.set(Math.cos(a) * rr, -1.25 + Math.sqrt(Math.max(0, 1 - (rr / r) ** 2)) * r * 0.55 - 0.05, Math.sin(a) * rr);
+    g.add(s);
+  }
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.position.set(x, y, z);
+  scene.add(g);
+
   const p = {
-    mesh, spring,
-    minX: x - w/2, maxX: x + w/2,
-    minZ: z - d/2, maxZ: z + d/2,
+    mesh: g, bouncy: true, squish: 0,
+    minX: x - r, maxX: x + r,
+    minZ: z - r, maxZ: z + r,
     top: y,
-    squish: 0,
   };
   platforms.push(p);
   return p;
 }
 
-// 弹簧平台（垃圾食品甜甜圈）：上面加甜甜圈装饰
-function addSpringPlatform(x, y, z, w, d) {
-  const p = addPlatform(x, y, z, w, d, 0xff9f43, true);
-  const donut = new THREE.Group();
-  const torus = new THREE.Mesh(
-    new THREE.TorusGeometry(0.55, 0.28, 16, 32),
-    new THREE.MeshStandardMaterial({ color: 0xf78fb3, roughness: 0.4 })
-  );
-  torus.rotation.x = Math.PI/2;
-  torus.castShadow = true;
-  donut.add(torus);
-  // 糖粒
-  const sprinkleMat = new THREE.MeshStandardMaterial({ color: 0xfff176 });
-  for (let i = 0; i < 10; i++) {
-    const s = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.04, 0.04), sprinkleMat);
-    const a = (i/10) * Math.PI * 2;
-    s.position.set(Math.cos(a)*0.55, 0.28, Math.sin(a)*0.55);
-    s.rotation.y = a;
-    donut.add(s);
+// 云朵平台（可以站上去，不弹跳）
+function addCloud(x, y, z, w, d) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 });
+  const n = Math.max(3, Math.round(w * d / 4));
+  for (let i = 0; i < n; i++) {
+    const s = new THREE.Mesh(new THREE.SphereGeometry(1.2 + Math.random() * 1.2, 14, 10), mat);
+    s.position.set((Math.random() - 0.5) * w * 0.8, (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * d * 0.8);
+    g.add(s);
   }
-  donut.position.set(x, y + 0.3, z);
-  scene.add(donut);
-  p.deco = donut;
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.position.set(x, y - 0.5, z);
+  scene.add(g);
+  const p = {
+    mesh: g, bouncy: false, squish: 0,
+    minX: x - w / 2, maxX: x + w / 2,
+    minZ: z - d / 2, maxZ: z + d / 2,
+    top: y,
+  };
+  platforms.push(p);
   return p;
 }
 
-// 汉堡
+// 火箭（碰到获得 15 秒飞行燃料）
+function addRocket(x, y, z) {
+  const g = new THREE.Group();
+  const bodyM = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.6, 20),
+    new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.3, metalness: 0.4 }));
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.7, 20),
+    new THREE.MeshStandardMaterial({ color: 0xff6b6b, roughness: 0.4 }));
+  nose.position.y = 1.15;
+  g.add(bodyM, nose);
+  const finMat = new THREE.MeshStandardMaterial({ color: 0xff6b6b, roughness: 0.4 });
+  for (let i = 0; i < 4; i++) {
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.5), finMat);
+    const a = (i / 4) * Math.PI * 2;
+    fin.position.set(Math.cos(a) * 0.45, -0.7, Math.sin(a) * 0.45);
+    fin.rotation.y = -a;
+    g.add(fin);
+  }
+  // 火焰（默认隐藏）
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.9, 12),
+    new THREE.MeshBasicMaterial({ color: 0xffa502 }));
+  flame.position.y = -1.3;
+  flame.rotation.x = Math.PI;
+  flame.visible = false;
+  g.add(flame);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.position.set(x, y + 1.2, z);
+  scene.add(g);
+  rockets.push({ group: g, flame, x, y: y + 1.2, z, used: false });
+}
+
+// 可收集的小汉堡
 function addBurger(x, y, z) {
   const g = new THREE.Group();
   const bottom = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.18, 24),
     new THREE.MeshStandardMaterial({ color: 0xe8a33d, roughness: 0.6 }));
-  bottom.position.y = 0;
   const patty = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.16, 24),
     new THREE.MeshStandardMaterial({ color: 0x6d4c2f, roughness: 0.8 }));
   patty.position.y = 0.18;
@@ -197,14 +274,14 @@ function addBurger(x, y, z) {
   const lettuce = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.08, 24),
     new THREE.MeshStandardMaterial({ color: 0x7ed957, roughness: 0.6 }));
   lettuce.position.y = 0.38;
-  const top = new THREE.Mesh(new THREE.SphereGeometry(0.5, 24, 12, 0, Math.PI*2, 0, Math.PI/2),
+  const top = new THREE.Mesh(new THREE.SphereGeometry(0.5, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2),
     new THREE.MeshStandardMaterial({ color: 0xe8a33d, roughness: 0.6 }));
   top.position.y = 0.42;
   const sesameMat = new THREE.MeshBasicMaterial({ color: 0xfff8e7 });
   for (let i = 0; i < 6; i++) {
     const s = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), sesameMat);
-    const a = (i/6) * Math.PI * 2;
-    s.position.set(Math.cos(a)*0.28, 0.72, Math.sin(a)*0.28);
+    const a = (i / 6) * Math.PI * 2;
+    s.position.set(Math.cos(a) * 0.28, 0.72, Math.sin(a) * 0.28);
     g.add(s);
   }
   g.add(bottom, patty, cheese, lettuce, top);
@@ -216,62 +293,48 @@ function addBurger(x, y, z) {
 }
 
 // ---------- 搭建关卡 ----------
-function buildLevel() {
-  // 起点平台
-  addPlatform(0, 0, 0, 8, 8, 0x95d5b2);
-  // 一段普通平台
-  addPlatform(0, 0, -10, 5, 4, 0xa3d9a5);
-  addPlatform(2, 1, -17, 4, 4, 0xa3d9a5);
-  addBurger(2, 1, -17);
-  addPlatform(-1, 2, -24, 4, 4, 0xa3d9a5);
-  addBurger(-1, 2, -24);
-  // 第一个弹簧（甜甜圈）
-  addSpringPlatform(0, 2, -32, 4, 4);
-  // 弹簧能弹到的高台
-  addPlatform(0, 9, -40, 5, 4, 0xcdb4db);
-  addBurger(0, 9, -40);
-  addPlatform(3, 10, -47, 4, 4, 0xcdb4db);
-  addBurger(3, 10, -47);
-  // 落回中低处
-  addPlatform(0, 5, -54, 4, 4, 0xa3d9a5);
-  addPlatform(-3, 4, -61, 4, 4, 0xa3d9a5);
-  addBurger(-3, 4, -61);
-  // 第二个弹簧
-  addSpringPlatform(-3, 4, -69, 4, 4);
-  // 高空路线
-  addPlatform(-3, 11, -77, 4, 4, 0xcdb4db);
-  addBurger(-3, 11, -77);
-  addPlatform(0, 12, -84, 4, 4, 0xcdb4db);
-  addBurger(0, 12, -84);
-  addPlatform(3, 11, -91, 4, 4, 0xcdb4db);
-  // 落回
-  addPlatform(3, 6, -98, 4, 4, 0xa3d9a5);
-  addBurger(3, 6, -98);
-  addPlatform(0, 5, -105, 4, 4, 0xa3d9a5);
-  // 第三个弹簧
-  addSpringPlatform(0, 5, -113, 4, 4);
-  // 终点高台
-  addPlatform(0, 13, -121, 5, 4, 0xcdb4db);
-  addBurger(0, 13, -121);
-  addPlatform(0, 14, -129, 8, 8, 0xffd166);
-  addBurger(0, 14, -129);
-  addBurger(-2, 14, -129);
-  addBurger(2, 14, -129);
-}
-buildLevel();
+// 地面：大汉堡弹跳塔，一路弹上云端
+addBigBurger(0, 0, 0, 2.6);          // 起点
+addBigBurger(0, 5, -9, 2.2);
+addBigBurger(2, 10, -16, 2.2);
+addBigBurger(-2, 15, -23, 2.2);
+addBigBurger(0, 20, -30, 2.2);
+
+// 云端（可站立）+ 火箭
+addCloud(0, 28, -38, 8, 8);
+addRocket(0, 28, -38);
+addCloud(7, 33, -48, 7, 7);
+addRocket(7, 33, -48);
+addCloud(-7, 38, -58, 7, 7);
+addRocket(-7, 38, -58);
+
+// 终点：最高处的云顶
+addCloud(0, 46, -70, 10, 10);
+
+// 沿途小汉堡
+addBurger(0, 5, -9);
+addBurger(2, 10, -16);
+addBurger(-2, 15, -23);
+addBurger(0, 20, -30);
+addBurger(0, 28, -38);
+addBurger(7, 33, -48);
+addBurger(-7, 38, -58);
+addBurger(0, 46, -70);
+addBurger(-2, 46, -70);
+addBurger(2, 46, -70);
 document.getElementById('scoreTotal').textContent = totalBurgers;
 
-// 云朵装饰
+// 背景装饰云
 const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 });
-for (let i = 0; i < 25; i++) {
+for (let i = 0; i < 30; i++) {
   const c = new THREE.Group();
-  const n = 3 + Math.floor(Math.random()*3);
+  const n = 3 + Math.floor(Math.random() * 3);
   for (let j = 0; j < n; j++) {
-    const s = new THREE.Mesh(new THREE.SphereGeometry(1.5 + Math.random()*1.5, 12, 10), cloudMat);
-    s.position.set(j*1.8 - n, Math.random()*0.8, Math.random()*1.5);
+    const s = new THREE.Mesh(new THREE.SphereGeometry(1.5 + Math.random() * 1.5, 12, 10), cloudMat);
+    s.position.set(j * 1.8 - n, Math.random() * 0.8, Math.random() * 1.5);
     c.add(s);
   }
-  c.position.set((Math.random()-0.5)*120, 18 + Math.random()*20, -Math.random()*150);
+  c.position.set((Math.random() - 0.5) * 160, 10 + Math.random() * 50, -Math.random() * 180);
   scene.add(c);
 }
 
@@ -283,7 +346,6 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => keys[e.code] = false);
 
-// 屏幕按钮（支持鼠标和触摸）
 document.querySelectorAll('.btn').forEach(btn => {
   const code = btn.dataset.key;
   const set = v => { keys[code] = v; btn.classList.toggle('pressed', v); };
@@ -300,6 +362,9 @@ function respawn() {
   playerState.pos.copy(respawnPoint);
   playerState.vel.set(0, 0, 0);
   playerState.onGround = false;
+  playerState.flying = false;
+  fuel = 0;
+  updateFuelHUD();
   showMsg('摔下来了！回到检查点');
 }
 
@@ -311,6 +376,17 @@ function showMsg(text) {
   el._t = setTimeout(() => el.style.opacity = 0, 1500);
 }
 
+function updateFuelHUD() {
+  const wrap = document.getElementById('fuelWrap');
+  if (fuel > 0) {
+    wrap.style.display = 'block';
+    document.getElementById('fuelTime').textContent = fuel.toFixed(1);
+    document.getElementById('fuelBar').style.width = (fuel / FLY_TIME * 100) + '%';
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
 // ---------- 主循环 ----------
 const clock = new THREE.Clock();
 const camTarget = new THREE.Vector3();
@@ -318,66 +394,96 @@ const camTarget = new THREE.Vector3();
 function update(dt) {
   const st = playerState;
 
-  // 水平移动（前后 + 左右）
-  let mx = 0, mz = 0;
-  if (keys['ArrowLeft'] || keys['KeyA']) mx -= 1;
-  if (keys['ArrowRight'] || keys['KeyD']) mx += 1;
-  if (keys['ArrowUp'] || keys['KeyW']) mz -= 1;   // 前进（朝关卡方向）
-  if (keys['ArrowDown'] || keys['KeyS']) mz += 1;  // 后退
-  const mlen = Math.hypot(mx, mz) || 1;
-  st.vel.x = (mx / mlen) * MOVE_SPEED;
-  st.vel.z = (mz / mlen) * MOVE_SPEED;
-  if (mx !== 0) st.facing = mx;
+  // 火箭：碰到且没燃料时启动
+  for (const r of rockets) {
+    if (fuel <= 0 && st.pos.distanceTo(new THREE.Vector3(r.x, r.y, r.z)) < 2.5) {
+      fuel = FLY_TIME;
+      st.flying = true;
+      showMsg('🚀 火箭启动！15 秒燃料！');
+    }
+  }
 
-  // 跳跃
-  if (keys['Space'] && st.onGround) {
-    st.vel.y = JUMP_VEL;
+  if (st.flying) {
+    // ---- 飞行模式：无重力，方向可控 ----
+    fuel -= dt;
+    if (fuel <= 0) {
+      fuel = 0;
+      st.flying = false;
+      showMsg('⛽ 燃料耗尽！');
+    }
+    let fx = 0, fy = 0, fz = 0;
+    if (keys['ArrowLeft'] || keys['KeyA']) fx -= 1;
+    if (keys['ArrowRight'] || keys['KeyD']) fx += 1;
+    if (keys['ArrowUp'] || keys['KeyW']) fy += 1;    // 升高
+    if (keys['ArrowDown'] || keys['KeyS']) fy -= 1;  // 下降
+    if (keys['KeyQ']) fz -= 1;                        // 前进
+    if (keys['KeyE']) fz += 1;                        // 后退
+    const flen = Math.hypot(fx, fy, fz) || 1;
+    const target = new THREE.Vector3(fx / flen, fy / flen, fz / flen).multiplyScalar(
+      (fx || fy || fz) ? FLY_SPEED : 0);
+    st.vel.lerp(target, Math.min(1, dt * 6));
+    st.pos.addScaledVector(st.vel, dt);
+    if (fx !== 0) st.facing = fx;
+    // 火焰
+    for (const r of rockets) r.flame.visible = false;
+  } else {
+    // ---- 普通模式 ----
+    let mx = 0, mz = 0;
+    if (keys['ArrowLeft'] || keys['KeyA']) mx -= 1;
+    if (keys['ArrowRight'] || keys['KeyD']) mx += 1;
+    if (keys['ArrowUp'] || keys['KeyW']) mz -= 1;
+    if (keys['ArrowDown'] || keys['KeyS']) mz += 1;
+    const mlen = Math.hypot(mx, mz) || 1;
+    st.vel.x = (mx / mlen) * MOVE_SPEED;
+    st.vel.z = (mz / mlen) * MOVE_SPEED;
+    if (mx !== 0) st.facing = mx;
+
+    if (keys['Space'] && st.onGround) {
+      st.vel.y = JUMP_VEL;
+      st.onGround = false;
+      st.squash = 1.3;
+    }
+
+    st.vel.y += GRAVITY * dt;
+    st.pos.addScaledVector(st.vel, dt);
+
+    // 平台碰撞
     st.onGround = false;
-    st.squash = 1.3;
-  }
-
-  // 重力
-  st.vel.y += GRAVITY * dt;
-  st.pos.addScaledVector(st.vel, dt);
-
-  // 平台碰撞（只从上方落下时着陆）
-  st.onGround = false;
-  let landedSpring = null;
-  for (const p of platforms) {
-    const withinX = st.pos.x > p.minX - PLAYER_R*0.6 && st.pos.x < p.maxX + PLAYER_R*0.6;
-    const withinZ = st.pos.z > p.minZ - PLAYER_R*0.6 && st.pos.z < p.maxZ + PLAYER_R*0.6;
-    if (!withinX || !withinZ) continue;
-    const feet = st.pos.y - PLAYER_R;
-    const prevFeet = feet - st.vel.y * dt;
-    if (st.vel.y <= 0 && prevFeet >= p.top - 0.05 && feet <= p.top) {
-      st.pos.y = p.top + PLAYER_R;
-      if (p.spring) {
-        st.vel.y = SPRING_VEL;
-        st.onGround = false;
-        st.squash = 1.5;
-        landedSpring = p;
-        showMsg('🍩 弹飞啦！');
-      } else {
-        st.vel.y = 0;
-        st.onGround = true;
-        lastSafe.set(st.pos.x, p.top + PLAYER_R, st.pos.z);
-        respawnPoint.copy(lastSafe);
+    let bounced = null;
+    for (const p of platforms) {
+      const withinX = st.pos.x > p.minX - PLAYER_R * 0.6 && st.pos.x < p.maxX + PLAYER_R * 0.6;
+      const withinZ = st.pos.z > p.minZ - PLAYER_R * 0.6 && st.pos.z < p.maxZ + PLAYER_R * 0.6;
+      if (!withinX || !withinZ) continue;
+      const feet = st.pos.y - PLAYER_R;
+      const prevFeet = feet - st.vel.y * dt;
+      if (st.vel.y <= 0 && prevFeet >= p.top - 0.05 && feet <= p.top) {
+        st.pos.y = p.top + PLAYER_R;
+        if (p.bouncy) {
+          st.vel.y = BURGER_BOUNCE;
+          st.onGround = false;
+          st.squash = 1.5;
+          bounced = p;
+        } else {
+          st.vel.y = 0;
+          st.onGround = true;
+          lastSafe.set(st.pos.x, p.top + PLAYER_R, st.pos.z);
+          respawnPoint.copy(lastSafe);
+        }
       }
     }
-  }
-  // 弹簧压缩动画
-  for (const p of platforms) {
-    if (p.spring) {
-      if (p === landedSpring) p.squish = 1;
-      p.squish = Math.max(0, p.squish - dt * 4);
-      if (p.deco) {
-        const s = 1 - p.squish * 0.4;
-        p.deco.scale.set(1 + p.squish*0.3, s, 1 + p.squish*0.3);
+    for (const p of platforms) {
+      if (p.bouncy) {
+        if (p === bounced) p.squish = 1;
+        p.squish = Math.max(0, p.squish - dt * 4);
+        const s = 1 - p.squish * 0.25;
+        p.mesh.scale.set(1 + p.squish * 0.2, s, 1 + p.squish * 0.2);
       }
     }
   }
 
-  // 收集汉堡
+  updateFuelHUD();
+
+  // 收集小汉堡
   for (const b of burgers) {
     if (b.collected) continue;
     if (st.pos.distanceTo(b.group.position) < 1.4) {
@@ -386,11 +492,10 @@ function update(dt) {
       score++;
       document.getElementById('scoreNum').textContent = score;
       showMsg('🍔 +1 美味！');
-      if (score === totalBurgers) showMsg('🎉 全部收集！你是汉堡大师！');
+      if (score === totalBurgers) showMsg('🎉 全部收集！汉堡大师！');
     }
   }
 
-  // 掉落
   if (st.pos.y < -15) respawn();
 
   // 玩家外观
@@ -399,13 +504,12 @@ function update(dt) {
   const sy = st.squash, sxz = 1 / Math.sqrt(st.squash);
   body.scale.set(sxz, sy, sxz);
   player.rotation.z = -st.vel.x * 0.03;
-  // 眼睛朝向移动方向
   const ex = st.facing * 0.05;
-  player.rotation.y = Math.atan2(st.vel.x, st.vel.z);
   eyeL.position.x = -0.2 + ex; eyeR.position.x = 0.2 + ex;
   cheekL.position.x = -0.35 + ex; cheekR.position.x = 0.35 + ex;
+  if (st.vel.length() > 0.5) player.rotation.y = Math.atan2(st.vel.x, st.vel.z);
 
-  // 汉堡旋转 + 浮动
+  // 小汉堡旋转 + 浮动
   const t = clock.elapsedTime;
   for (const b of burgers) {
     if (b.collected) continue;
@@ -417,7 +521,6 @@ function update(dt) {
   camTarget.set(st.pos.x * 0.6, st.pos.y + 4, st.pos.z + 10);
   camera.position.lerp(camTarget, Math.min(1, dt * 5));
   camera.lookAt(st.pos.x * 0.6, st.pos.y + 1, st.pos.z - 2);
-  // 太阳光跟随
   sun.position.set(st.pos.x + 20, st.pos.y + 40, st.pos.z + 10);
   sun.target.position.copy(st.pos);
   sun.target.updateMatrixWorld();
@@ -434,12 +537,15 @@ animate();
 // ---------- 重新开始 ----------
 document.getElementById('restart').addEventListener('click', () => {
   score = 0;
+  fuel = 0;
+  updateFuelHUD();
   document.getElementById('scoreNum').textContent = 0;
   for (const b of burgers) { b.collected = false; b.group.visible = true; }
   respawnPoint.set(0, 2, 0);
   lastSafe.set(0, 2, 0);
   playerState.pos.set(0, 2, 0);
   playerState.vel.set(0, 0, 0);
+  playerState.flying = false;
   showMsg('重新开始！');
 });
 
