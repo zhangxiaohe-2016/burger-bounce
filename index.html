@@ -181,6 +181,12 @@ const M = {
   cheese: new THREE.MeshStandardMaterial({ color: 0xffd43b, roughness: 0.4 }),
   lettuce: new THREE.MeshStandardMaterial({ color: 0x7ed957, roughness: 0.6 }),
   sesame: new THREE.MeshBasicMaterial({ color: 0xfff8e7 }),
+  donutFrost: new THREE.MeshStandardMaterial({ color: 0xf78fb3, roughness: 0.35 }),
+  colaRed: new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.4 }),
+  colaWhite: new THREE.MeshStandardMaterial({ color: 0xf5f5f5, roughness: 0.5 }),
+  colaStraw: new THREE.MeshStandardMaterial({ color: 0xff6b6b, roughness: 0.4 }),
+  nugget: new THREE.MeshStandardMaterial({ color: 0xf0b25a, roughness: 0.55 }),
+  nuggetTray: new THREE.MeshStandardMaterial({ color: 0xe74c3c, roughness: 0.7 }),
   cloud: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 }),
   rocketBody: new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.3, metalness: 0.4 }),
   rocketRed: new THREE.MeshStandardMaterial({ color: 0xff6b6b, roughness: 0.4 }),
@@ -318,38 +324,109 @@ function makeTableSet(i, salt, x, z) {
   return g;
 }
 
-// ---------- 玩法组件 ----------
-function makeBigBurger(r = 2.2) {
+// ---------- 弹跳食品（果冻感：原点在地面，踩下时顶部下压、底部不动） ----------
+function makeBurger(r = 2.2) {
   const g = new THREE.Group();
   const bottom = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.9, 0.5, 32), M.bun);
-  bottom.position.y = -2.5;
+  bottom.position.y = 0.25;
   const patty = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.02, r * 1.02, 0.45, 32), M.patty);
-  patty.position.y = -1.95;
+  patty.position.y = 0.8;
   const cheese = new THREE.Mesh(new THREE.BoxGeometry(r * 1.9, 0.12, r * 1.9), M.cheese);
-  cheese.position.y = -1.6;
+  cheese.position.y = 1.15;
   const lettuce = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.06, r * 1.06, 0.2, 32), M.lettuce);
-  lettuce.position.y = -1.4;
+  lettuce.position.y = 1.35;
   const top = new THREE.Mesh(new THREE.SphereGeometry(r, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), M.bun);
   top.scale.y = 0.55;
-  top.position.y = -1.25;
+  top.position.y = 1.5;
   g.add(bottom, patty, cheese, lettuce, top);
   for (let i = 0; i < 14; i++) {
     const s = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), M.sesame);
     const a = (i / 14) * Math.PI * 2;
     const rr = r * (0.3 + Math.random() * 0.5);
-    s.position.set(Math.cos(a) * rr, -1.25 + Math.sqrt(Math.max(0, 1 - (rr / r) ** 2)) * r * 0.55 - 0.05, Math.sin(a) * rr);
+    s.position.set(Math.cos(a) * rr, 1.5 + Math.sqrt(Math.max(0, 1 - (rr / r) ** 2)) * r * 0.55 - 0.05, Math.sin(a) * rr);
     g.add(s);
   }
   g.traverse(o => { if (o.isMesh) o.castShadow = true; });
-  return g;
+  return { g, h: 1.5 + r * 0.55 };
 }
 
-function addBigBurger(chunk, x, y, z, r = 2.2) {
-  const g = makeBigBurger(r);
-  g.position.set(x, y, z);
+function makeDonut(r = 2.2) {
+  const g = new THREE.Group();
+  const R = r * 0.72, tube = r * 0.34;
+  const base = new THREE.Mesh(new THREE.TorusGeometry(R, tube, 16, 40), M.bun);
+  base.rotation.x = Math.PI / 2;
+  base.position.y = tube;
+  const frost = new THREE.Mesh(new THREE.TorusGeometry(R, tube * 0.72, 16, 40), M.donutFrost);
+  frost.rotation.x = Math.PI / 2;
+  frost.position.y = tube + tube * 0.28;
+  g.add(base, frost);
+  const sprinkleColors = [0xfff176, 0x7ed957, 0x4a90d9, 0xffffff];
+  for (let i = 0; i < 16; i++) {
+    const s = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.07, 0.09),
+      new THREE.MeshStandardMaterial({ color: sprinkleColors[i % 4] }));
+    const a = (i / 16) * Math.PI * 2;
+    s.position.set(Math.cos(a) * R, tube * 2 + tube * 0.3, Math.sin(a) * R);
+    s.rotation.y = -a;
+    g.add(s);
+  }
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  return { g, h: tube * 2 + tube * 0.35 };
+}
+
+function makeCola(r = 2.2) {
+  const g = new THREE.Group();
+  const cw = r * 0.55;
+  const cup = new THREE.Mesh(new THREE.CylinderGeometry(cw, cw * 0.68, 1.9, 24), M.colaRed);
+  cup.position.y = 0.95;
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(cw * 1.02, cw * 0.93, 0.55, 24), M.colaWhite);
+  band.position.y = 1.0;
+  const lid = new THREE.Mesh(new THREE.CylinderGeometry(cw * 1.06, cw * 1.06, 0.18, 24), M.colaWhite);
+  lid.position.y = 1.99;
+  const straw = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.3, 10), M.colaStraw);
+  straw.position.set(cw * 0.3, 2.5, 0);
+  straw.rotation.z = -0.25;
+  g.add(cup, band, lid, straw);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  return { g, h: 2.08 };
+}
+
+function makeNuggets(r = 2.2) {
+  const g = new THREE.Group();
+  const tray = new THREE.Mesh(new THREE.BoxGeometry(r * 1.7, 0.5, r * 1.7), M.nuggetTray);
+  tray.position.y = 0.25;
+  g.add(tray);
+  const spots = [[0, 0], [0.7, 0.4], [-0.7, 0.3], [0.35, -0.7], [-0.45, -0.6], [0.1, 0.75]];
+  for (const [dx, dz] of spots) {
+    const n = new THREE.Mesh(new THREE.SphereGeometry(0.55, 14, 10), M.nugget);
+    n.scale.set(1.3, 0.75, 1);
+    n.position.set(dx * r * 0.5, 0.62, dz * r * 0.5);
+    n.rotation.y = Math.random() * 3;
+    g.add(n);
+  }
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  return { g, h: 1.05 };
+}
+
+const FOODS = [
+  { type: 'burger', w: 4, make: makeBurger },
+  { type: 'donut', w: 2, make: makeDonut },
+  { type: 'cola', w: 2, make: makeCola },
+  { type: 'nuggets', w: 2, make: makeNuggets },
+];
+function pickFood() {
+  const total = FOODS.reduce((s, f) => s + f.w, 0);
+  let x = Math.random() * total;
+  for (const f of FOODS) { x -= f.w; if (x <= 0) return f; }
+  return FOODS[0];
+}
+
+function addFood(chunk, x, y, z, r = 2.2, forceType) {
+  const f = forceType ? FOODS.find(f => f.type === forceType) : pickFood();
+  const { g, h } = f.make(r);
+  g.position.set(x, y - h, z);   // 原点在底部，顶面正好在 y
   chunk.group.add(g);
   return regPlatform(chunk, {
-    mesh: g, bouncy: true, squish: 0,
+    mesh: g, bouncy: true, jellyT: -1,
     minX: x - r, maxX: x + r, minZ: z - r, maxZ: z + r, top: y,
   });
 }
@@ -485,7 +562,7 @@ function generateChunk(i) {
 
   // 起点大汉堡（第 0 区块）
   if (i === 0) {
-    addBigBurger(chunk, 0, 0, 0, 2.8);
+    addFood(chunk, 0, 0, 0, 2.8, 'burger');
     addBurger(chunk, 0, 0, 0);
   }
 
@@ -495,13 +572,13 @@ function generateChunk(i) {
     const by = j === 0 ? 1 + rand(i, j + 40) * 1.5 : 2 + rand(i, j + 40) * 6;
     const bz = zNear - 6 - j * 9;
     const r = 2.0 + rand(i, j + 50) * 0.6;
-    addBigBurger(chunk, bx, by, bz, r);
+    addFood(chunk, bx, by, bz, r);
     if (rand(i, j + 60) > 0.35) addBurger(chunk, bx, by, bz);
   }
 
   // 每 4 个区块一段云端（云可站 + 多个火箭）
   if (i % 4 === 3) {
-    addBigBurger(chunk, 0, 10, zMid, 2.4);          // 跳板
+    addFood(chunk, 0, 10, zMid, 2.4, 'donut');      // 跳板：大甜甜圈
     addBurger(chunk, 0, 10, zMid);
     const c1x = (rand(i, 70) - 0.5) * 6;
     const c2x = (rand(i, 71) - 0.5) * 6;
@@ -689,12 +766,18 @@ function update(dt) {
         }
       }
     }
+    // 果冻感：踩下 → 快速回弹 → 带余震地晃回原样（欠阻尼弹簧）
     for (const p of platforms) {
-      if (p.bouncy) {
-        if (p === bounced) p.squish = 1;
-        p.squish = Math.max(0, p.squish - dt * 4);
-        const s = 1 - p.squish * 0.25;
-        p.mesh.scale.set(1 + p.squish * 0.2, s, 1 + p.squish * 0.2);
+      if (!p.bouncy) continue;
+      if (p === bounced) p.jellyT = 0;
+      if (p.jellyT < 0) continue;
+      p.jellyT += dt;
+      if (p.jellyT > 1.2) {
+        p.jellyT = -1;
+        p.mesh.scale.set(1, 1, 1);
+      } else {
+        const off = -0.45 * Math.exp(-3.5 * p.jellyT) * Math.cos(12 * p.jellyT);
+        p.mesh.scale.set(1 - off * 0.55, 1 + off, 1 - off * 0.55);
       }
     }
   }
